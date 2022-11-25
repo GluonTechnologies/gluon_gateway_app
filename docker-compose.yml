@@ -1,0 +1,142 @@
+version: "3.7"
+services:
+  gluon_gateway_app_worker:
+    image: gluontech/gluon_gateway_app_worker
+    restart: unless-stopped
+    command: >
+      sh -c "chmod -R 777 storage &&
+      chmod -R 777 public &&
+      php artisan config:cache &&
+      php artisan queue:work --timeout=3000"
+    deploy:
+      replicas: 0
+    depends_on:
+      - gluon_gateway_app_api
+      - gluon_gateway_app_ampq
+    environment:
+      - DB_HOST:${DB_HOST}
+      - DB_PORT:${DB_PORT}
+      - DB_DATABASE:${DB_DATABASE}
+      - DB_PASSWORD:${DB_PASSWORD}
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_scheduler:
+    image: gluontech/gluon_gateway_app_scheduler
+    restart: unless-stopped
+    depends_on:
+      - gluon_gateway_app_api
+      - gluon_gateway_app_ampq
+    environment:
+      - DB_HOST:${DB_HOST}
+      - DB_PORT:${DB_PORT}
+      - DB_DATABASE:${DB_DATABASE}
+      - DB_PASSWORD:${DB_PASSWORD}
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_api:
+    image: gluontech/gluon_gateway_app_api
+    restart: unless-stopped
+    environment:
+      - DB_HOST:${DB_HOST}
+      - DB_PORT:${DB_PORT}
+      - DB_DATABASE:${DB_DATABASE}
+      - DB_PASSWORD:${DB_PASSWORD}
+      - RABBITMQ_HOST:${RABBITMQ_HOST}
+      - RABBITMQ_PORT:${RABBITMQ_PORT}
+      - RABBITMQ_USER:${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD:${RABBITMQ_PASSWORD}
+      - RABBITMQ_QUEUE_NAME:${RABBITMQ_QUEUE_NAME}
+      - RABBITMQ_EXCHANGE_NAME:${RABBITMQ_EXCHANGE_NAME}
+      - RABBITMQ_EXCHANGE_ROUTING_KEY:${RABBITMQ_EXCHANGE_ROUTING_KEY}
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: gluontech/gluon_gateway_app_nginx
+    restart: unless-stopped
+    ports:
+      - ${APP_PORT}:80
+    volumes:
+      - .:/var/www/html
+      - ./conf/negarit_sms_gateway_nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gluon_gateway_app_api
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_mysql:
+    image: mysql:5.7
+    restart: unless-stopped
+    tty: true
+    ports:
+      - ${APP_DB_PORT}:3306
+    volumes:
+      - ./data/negarit_sms_gateway_mysql/mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_ampq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - ${APP_AMPQ_PORT}:15672
+      - ${APP_AMPQ_CLI_PORT}:5672
+    volumes:
+      - ./data/negarit_sms_gateway_ampq/rabbitmq:/var/lib/rabbitmq/
+    networks:
+      - gluon_gateway_app_network
+
+  gluon_gateway_app_ampq_auto_configurer:
+    image: gluontech/rabbit_mq_config
+    restart: unless-stopped
+    environment:
+      AMPQ_HOST: ${RABBITMQ_HOST}
+      AMPQ_PORT: ${RABBITMQ_PORT}
+      AMPQ_USERNAME: ${RABBITMQ_USER}
+      AMPQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_QUEUE_NAME: ${RABBITMQ_QUEUE_NAME}
+      RABBITMQ_EXCHANGE_NAME: ${RABBITMQ_EXCHANGE_NAME}
+      RABBITMQ_EXCHANGE_ROUTING_KEY: ${RABBITMQ_EXCHANGE_ROUTING_KEY}
+      WAIT_TIME: 30
+    depends_on:
+      - gluon_gateway_app_ampq
+    networks:
+      - gluon_gateway_app_network
+
+  negarit_sms_gateway_task_publisher:
+    image: gluontech/gluon_gateway_task_publisher
+    restart: unless-stopped
+    environment:
+      - AMPQ_HOST=negarit_sms_gateway_ampq
+      - AMPQ_VHOST=/
+      - AMPQ_PORT=5672
+      - AMPQ_USERNAME=${RABBITMQ_USER}
+      - AMPQ_PASSWORD=${RABBITMQ_PASSWORD}
+    networks:
+      - gluon_gateway_app_network
+
+  negarit_sms_gateway_task_consumer:
+    image: gluontech/gluon_gateway_task_hook
+    restart: unless-stopped
+    environment:
+      - AMPQ_HOST=negarit_sms_gateway_ampq
+      - AMPQ_PORT=5672
+      - AMPQ_VHOST=/
+      - AMPQ_USERNAME=${RABBITMQ_USER}
+      - AMPQ_PASSWORD=${RABBITMQ_PASSWORD}
+    networks:
+      - gluon_gateway_app_network
+
+networks:
+  gluon_gateway_app_network:
+    driver: bridge

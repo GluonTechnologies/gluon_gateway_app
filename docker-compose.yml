@@ -113,27 +113,29 @@ services:
     networks:
       - gluon_gateway_app_network
 
-  negarit_sms_gateway_task_publisher:
+  gluon_gateway_task_publisher:
     image: gluontech/gluon_gateway_task_publisher
     restart: unless-stopped
     environment:
-      - AMPQ_HOST=negarit_sms_gateway_ampq
-      - AMPQ_VHOST=/
-      - AMPQ_PORT=5672
-      - AMPQ_USERNAME=${RABBITMQ_USER}
-      - AMPQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - AMPQ_HOST=${CLOUD_RABBITMQ_HOST}
+      - AMPQ_PORT=${CLOUD_RABBITMQ_PORT}
+      - AMPQ_VHOST=${CLOUD_RABBITMQ_VHOST}
+      - AMPQ_USERNAME=${CLOUD_RABBITMQ_USER}
+      - AMPQ_PASSWORD=${CLOUD_RABBITMQ_PASSWORD}
     networks:
       - gluon_gateway_app_network
 
-  negarit_sms_gateway_task_consumer:
+  gluon_gateway_task_hook:
     image: gluontech/gluon_gateway_task_hook
     restart: unless-stopped
     environment:
-      - AMPQ_HOST=negarit_sms_gateway_ampq
-      - AMPQ_PORT=5672
-      - AMPQ_VHOST=/
-      - AMPQ_USERNAME=${RABBITMQ_USER}
-      - AMPQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - AMPQ_HOST=${CLOUD_RABBITMQ_HOST}
+      - AMPQ_PORT=${CLOUD_RABBITMQ_PORT}
+      - AMPQ_VHOST=${CLOUD_RABBITMQ_VHOST}
+      - AMPQ_USERNAME=${CLOUD_RABBITMQ_USER}
+      - AMPQ_PASSWORD=${CLOUD_RABBITMQ_PASSWORD}
+      - QUEUE_NAME=${CLOUD_RABBITMQ_PASSWORD}
+      - WEBHOOK_URL=${CLOUD_RABBITMQ_WEBHOOK_URL}
     networks:
       - gluon_gateway_app_network
 
